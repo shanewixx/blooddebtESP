@@ -1,0 +1,275 @@
+-- 🔫 Weapon lists
+local murdererWeapons = {
+    ["JS-2 Derringy"] = true, ["JS-22"] = true, ["RR-LCP"] = true,
+    ["Sawn-off"] = true, ["Rosen-Obrez"] = true, ["K1911"] = true,
+    ["SKORPION"] = true, ["ZZ-90"] = true, ["Silver Steel K1911"] = true,
+    ["Clothed Rosen-Obrez"] = true, ["Clothed Sawn-off"] = true,
+    ["Kamatov"] = true, ["GILDED"] = true, ["JS-2 Bonds Derringy"] = true,
+    ["Charcoal Steel JS-22"] = true, ["Pretty Pink RR-LCP"] = true
+}
+
+local sheriffWeapons = {
+    ["RR-Snubby"] = true, ["GG-17"] = true, ["J9-M"] = true,
+    ["I-412"] = true, ["Silver Steel RR-Snubby"] = true
+}
+
+local juggernautWeapons = {
+    ["VK's ANKM"] = true,
+    ["AT's KAR15"] = true,
+    ["RY's GG-17"] = true
+}
+
+local innocentWeapons = {
+    ["Lead Pipe"] = true, ["KitchenKnife"] = true, ["Boxcutters"] = true, ["Pen"] = true
+}
+
+-- 🛠 Services
+local Players = game:GetService("Players")
+local StarterGui = game:GetService("StarterGui")
+local RunService = game:GetService("RunService")
+
+-- 🎨 Updated Colors
+local COLORS = {
+    Murderer = Color3.fromRGB(255, 0, 0),       -- 🔴 Red
+    Sheriff = Color3.fromRGB(0, 0, 255),        -- 🔵 Blue
+    Juggernaut = Color3.fromRGB(139, 0, 0),     -- 🟤 Burgundy
+    Innocent = Color3.fromRGB(0, 255, 0),       -- 🟢 Green
+    InnocentWithWeapon = Color3.fromRGB(175, 255, 255)  -- 🌈 Light Cyan
+}
+
+-- 🔄 Player Cache
+local playerCache = {}
+local lastUpdate = 0
+
+-- 📦 Optimized Role Detection
+local function determineRole(player)
+    if playerCache[player] and os.clock() - playerCache[player].lastCheck < 5 then
+        return playerCache[player].role, playerCache[player].weapon
+    end
+
+    local items = {}
+    local backpack = player:FindFirstChild("Backpack")
+    if backpack then
+        for _, item in ipairs(backpack:GetChildren()) do
+            table.insert(items, item.Name)
+        end
+    end
+
+    local character = player.Character
+    if character then
+        for _, item in ipairs(character:GetChildren()) do
+            if item:IsA("Tool") then
+                table.insert(items, item.Name)
+            end
+        end
+    end
+
+    for _, item in ipairs(items) do
+        if murdererWeapons[item] then
+            playerCache[player] = {role = "Murderer", weapon = nil, lastCheck = os.clock()}
+            return "Murderer"
+        elseif sheriffWeapons[item] then
+            playerCache[player] = {role = "Sheriff", weapon = nil, lastCheck = os.clock()}
+            return "Sheriff"
+        elseif juggernautWeapons[item] then
+            playerCache[player] = {role = "Juggernaut", weapon = nil, lastCheck = os.clock()}
+            return "Juggernaut"
+        end
+    end
+
+    for _, item in ipairs(items) do
+        if innocentWeapons[item] then
+            playerCache[player] = {role = "InnocentWithWeapon", weapon = item, lastCheck = os.clock()}
+            return "InnocentWithWeapon", item
+        end
+    end
+
+    playerCache[player] = {role = "Innocent", weapon = nil, lastCheck = os.clock()}
+    return "Innocent"
+end
+
+-- ✨ Highlighting
+local function highlightPlayer(player, role)
+    local character = player.Character
+    if not character then return end
+
+    local existing = character:FindFirstChild("RoleHighlight")
+    if existing then
+        if existing.FillColor == COLORS[role] then return end
+        existing:Destroy()
+    end
+
+    local highlight = Instance.new("Highlight")
+    highlight.Name = "RoleHighlight"
+    highlight.FillTransparency = 0.7
+    highlight.OutlineTransparency = 0.3
+    highlight.FillColor = COLORS[role] or COLORS.Innocent
+    highlight.OutlineColor = Color3.new(0, 0, 0)
+    highlight.Parent = character
+end
+
+-- 🏷 Name Tags with Distance
+local function createNameTag(player, role, weapon)
+    local character = player.Character
+    if not character then return end
+
+    local head = character:FindFirstChild("Head")
+    if not head then return end
+
+    -- Calculate distance
+    local localPlayer = Players.LocalPlayer
+    local distance = "??"
+    if localPlayer.Character and localPlayer.Character:FindFirstChild("HumanoidRootPart") then
+        distance = tostring(math.floor((character.HumanoidRootPart.Position - localPlayer.Character.HumanoidRootPart.Position).Magnitude)) .. " studs"
+    end
+
+    local billboard = head:FindFirstChild("RoleTag") or Instance.new("BillboardGui")
+    billboard.Name = "RoleTag"
+    billboard.Size = UDim2.new(0, 200, 0, 50)
+    billboard.StudsOffset = Vector3.new(0, 3, 0)
+    billboard.AlwaysOnTop = true
+    billboard.Adornee = head
+    billboard.MaxDistance = 150
+    billboard.Active = true
+
+    local label = billboard:FindFirstChild("RoleLabel") or Instance.new("TextLabel")
+    label.Name = "RoleLabel"
+    label.Size = UDim2.new(1, 0, 1, 0)
+    label.BackgroundTransparency = 1
+    label.Font = Enum.Font.SourceSansBold
+    label.TextSize = 18
+    label.TextStrokeTransparency = 0.5
+    label.TextColor3 = COLORS[role] or COLORS.Innocent
+
+    if role == "InnocentWithWeapon" then
+        label.Text = string.format("%s\n⚔ %s (%s)", player.Name, weapon, distance)
+    elseif role == "Innocent" then
+        label.Text = string.format("%s (%s)", player.Name, distance)
+    else
+        label.Text = string.format("%s: %s (%s)", role:upper(), player.Name, distance)
+    end
+
+    label.Parent = billboard
+    billboard.Parent = head
+end
+
+-- 📊 Stats UI
+local statsUI = Instance.new("ScreenGui")
+statsUI.Name = "RoleStatsUI"
+statsUI.ResetOnSpawn = false
+statsUI.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+
+local frame = Instance.new("Frame")
+frame.Size = UDim2.new(0, 250, 0, 180)
+frame.Position = UDim2.new(1, -260, 0, 10)
+frame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+frame.BackgroundTransparency = 0.3
+frame.BorderSizePixel = 0
+
+local statsLabel = Instance.new("TextLabel")
+statsLabel.Size = UDim2.new(1, -10, 1, -40)
+statsLabel.Position = UDim2.new(0, 5, 0, 5)
+statsLabel.BackgroundTransparency = 1
+statsLabel.TextXAlignment = Enum.TextXAlignment.Left
+statsLabel.TextYAlignment = Enum.TextYAlignment.Top
+statsLabel.Font = Enum.Font.SourceSansBold
+statsLabel.TextSize = 18
+statsLabel.TextColor3 = Color3.new(1, 1, 1)
+statsLabel.Text = "Loading stats..."
+statsLabel.Name = "StatsLabel"
+
+local footer = Instance.new("TextLabel")
+footer.Size = UDim2.new(1, -10, 0, 30)
+footer.Position = UDim2.new(0, 5, 1, -35)
+footer.BackgroundTransparency = 1
+footer.Font = Enum.Font.SourceSans
+footer.TextSize = 16
+footer.Text = "BloodDebt ESP v1.4"
+footer.TextColor3 = Color3.new(1, 1, 1)
+
+statsLabel.Parent = frame
+footer.Parent = frame
+frame.Parent = statsUI
+statsUI.Parent = Players.LocalPlayer:WaitForChild("PlayerGui")
+
+-- 🔄 Update All Players
+local function updateAllPlayers()
+    if os.clock() - lastUpdate < 1 then return end
+    lastUpdate = os.clock()
+
+    local counts = {
+        Murderer = 0,
+        Sheriff = 0,
+        Juggernaut = 0,
+        Innocent = 0,
+        InnocentWithWeapon = 0
+    }
+
+    for _, player in ipairs(Players:GetPlayers()) do
+        local role, weapon = determineRole(player)
+        counts[role] = counts[role] + 1
+
+        if player.Character then
+            highlightPlayer(player, role)
+            createNameTag(player, role, weapon)
+        end
+    end
+
+    statsLabel.Text = string.format(
+        "🔴 Murderers: %d\n🔵 Sheriffs: %d\n🟤 Juggernauts: %d\n⚔ Armed: %d\n👤 Total: %d",
+        counts.Murderer, counts.Sheriff, counts.Juggernaut, 
+        counts.InnocentWithWeapon,
+        #Players:GetPlayers()
+    )
+end
+
+-- 🏁 Initialize Player
+local function initPlayer(player)
+    player.CharacterAdded:Connect(function(character)
+        character:WaitForChild("Humanoid").Died:Connect(function()
+            cleanupCharacter(character)
+        end)
+        task.wait(1)
+        local role, weapon = determineRole(player)
+        highlightPlayer(player, role)
+        createNameTag(player, role, weapon)
+    end)
+
+    if player.Character then
+        task.spawn(function()
+            task.wait(1)
+            local role, weapon = determineRole(player)
+            highlightPlayer(player, role)
+            createNameTag(player, role, weapon)
+        end)
+    end
+end
+
+-- 🧹 Cleanup
+local function cleanupCharacter(character)
+    if not character then return end
+    local highlight = character:FindFirstChild("RoleHighlight")
+    if highlight then highlight:Destroy() end
+    local head = character:FindFirstChild("Head")
+    if head then
+        local tag = head:FindFirstChild("RoleTag")
+        if tag then tag:Destroy() end
+    end
+end
+
+-- 🚀 Start
+for _, player in ipairs(Players:GetPlayers()) do
+    initPlayer(player)
+end
+
+Players.PlayerAdded:Connect(initPlayer)
+
+RunService.Heartbeat:Connect(function()
+    updateAllPlayers()
+end)
+
+StarterGui:SetCore("SendNotification", {
+    Title = "BloodDebt ESP",
+    Text = "Everything is working normally, thanks for using my esp.",
+    Duration = 15
+})

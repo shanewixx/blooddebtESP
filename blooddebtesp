@@ -5,6 +5,7 @@ local murdererWeapons = {
     ["Clothed Rosen-Obrez"] = true, ["Clother Sawn-off"] = true,
     ["Kamatov"] = true, ["GILDED"] = true, ["JS-2 BONDS DERRINGY"] = true,
     ["Charcoal Steel JS-22"] = true, ["Pretty Pink RR-LCP"] = true
+    ["JS2-BondsDerringy"] = true
 }
 
 local sheriffWeapons = {
@@ -17,7 +18,7 @@ local innocentWeapons = {
 }
 
 local juggernautWeapons = {
-    ["ANKM"] = true, ["RY's GG-17"] = true
+    ["VK's ANKM"] = true, ["RY's GG-17"] = true
 }
 
 local Players = game:GetService("Players")

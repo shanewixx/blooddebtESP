@@ -4,8 +4,7 @@ local murdererWeapons = {
     ["SKORPION"] = true, ["ZZ-90"] = true, ["SILVER STEEL K1911"] = true,
     ["Clothed Rosen-Obrez"] = true, ["Clother Sawn-off"] = true,
     ["Kamatov"] = true, ["GILDED"] = true, ["JS-2 BONDS DERRINGY"] = true,
-    ["Charcoal Steel JS-22"] = true, ["Pretty Pink RR-LCP"] = true
-    ["JS2-BondsDerringy"] = true
+    ["Charcoal Steel JS-22"] = true, ["Pretty Pink RR-LCP"] = true, ["JS2-BondsDerringy"] = true
 }
 
 local sheriffWeapons = {

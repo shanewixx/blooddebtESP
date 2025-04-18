@@ -1,0 +1,301 @@
+local murdererWeapons = {
+    ["JS-2 DERRINGY"] = true, ["JS-22"] = true, ["RR-LCP"] = true,
+    ["Sawn-off"] = true, ["Rosen-Obrez"] = true, ["K1911"] = true,
+    ["SKORPION"] = true, ["ZZ-90"] = true, ["SILVER STEEL K1911"] = true,
+    ["Clothed Rosen-Obrez"] = true, ["Clother Sawn-off"] = true,
+    ["Kamatov"] = true, ["GILDED"] = true, ["JS-2 BONDS DERRINGY"] = true,
+    ["Charcoal Steel JS-22"] = true, ["Pretty Pink RR-LCP"] = true
+}
+
+local sheriffWeapons = {
+    ["RR-Snubby"] = true, ["GG-17"] = true, ["J9-M"] = true,
+    ["I-412"] = true, ["Silver Steel RR-Snubby"] = true
+}
+
+local innocentWeapons = {
+    ["Lead Pipe"] = true, ["KitchenKnife"] = true, ["Boxcutters"] = true, ["Pen"] = true
+}
+
+local juggernautWeapons = {
+    ["ANKM"] = true 
+}
+
+local Players = game:GetService("Players")
+local StarterGui = game:GetService("StarterGui")
+local RunService = game:GetService("RunService")
+
+local function determineRole(player)
+    local backpack = player:FindFirstChild("Backpack")
+    local character = player.Character
+    local items = {}
+
+    if backpack then
+        for _, item in ipairs(backpack:GetChildren()) do
+            table.insert(items, item.Name)
+        end
+    end
+
+    if character then
+        for _, item in ipairs(character:GetChildren()) do
+            if item:IsA("Tool") then
+                table.insert(items, item.Name)
+            end
+        end
+    end
+
+    local murdererFound = false
+    local sheriffFound = false
+    local juggernautFound = false
+
+    for _, itemName in ipairs(items) do
+        if murdererWeapons[itemName] then
+            murdererFound = true
+            break
+        elseif sheriffWeapons[itemName] then
+            sheriffFound = true
+            break
+        elseif juggernautWeapons[itemName] then
+            juggernautFound = true
+            break
+        end
+    end
+
+    if murdererFound then
+        return "Murderer"
+    elseif sheriffFound then
+        return "Sheriff"
+    elseif juggernautFound then
+        return "Juggernaut"
+    end
+
+    for _, itemName in ipairs(items) do
+        if innocentWeapons[itemName] then
+            return "InnocentWithWeapon", itemName
+        end
+    end
+
+    return "Innocent"
+end
+
+local function highlightPlayer(player, role)
+    local character = player.Character
+    if not character then return end
+
+    local existingHighlight = character:FindFirstChild("RoleHighlight")
+    if existingHighlight then existingHighlight:Destroy() end
+
+    local highlight = Instance.new("Highlight")
+    highlight.Name = "RoleHighlight"
+    highlight.FillTransparency = 0.5
+    highlight.OutlineTransparency = 1
+
+    if role == "Murderer" then
+        highlight.FillColor = Color3.fromRGB(255, 0, 0)
+    elseif role == "Sheriff" then
+        highlight.FillColor = Color3.fromRGB(0, 0, 255)
+    elseif role == "Juggernaut" then
+        highlight.FillColor = Color3.fromRGB(255, 165, 0) 
+    elseif role == "InnocentWithWeapon" then
+        highlight.FillColor = Color3.fromRGB(0, 255, 255)
+    else
+        highlight.FillColor = Color3.fromRGB(0, 255, 0)
+    end
+
+    highlight.Parent = character
+end
+
+local function setNameOverhead(player, role, weaponName)
+    local character = player.Character
+    if not character then return end
+    local head = character:FindFirstChild("Head")
+    if not head then return end
+
+    local oldGui = head:FindFirstChild("RoleBillboard")
+    if oldGui then oldGui:Destroy() end
+
+    local billboard = Instance.new("BillboardGui")
+    billboard.Name = "RoleBillboard"
+    billboard.Size = UDim2.new(0, 100, 0, 40)
+    billboard.StudsOffset = Vector3.new(0, 2.3, 0)
+    billboard.Adornee = head
+    billboard.AlwaysOnTop = true
+    billboard.Parent = head
+
+    if role == "InnocentWithWeapon" then
+        local title = Instance.new("TextLabel")
+        title.Size = UDim2.new(1, 0, 0.5, 0)
+        title.Position = UDim2.new(0, 0, 0, 0)
+        title.BackgroundTransparency = 1
+        title.TextScaled = true
+        title.Font = Enum.Font.SourceSansBold
+        title.TextStrokeTransparency = 0.5
+        title.Text = "HAS " .. weaponName .. ":"
+        title.TextColor3 = Color3.fromRGB(0, 255, 255)
+        title.Parent = billboard
+
+        local name = Instance.new("TextLabel")
+        name.Size = UDim2.new(1, 0, 0.5, 0)
+        name.Position = UDim2.new(0, 0, 0.5, 0)
+        name.BackgroundTransparency = 1
+        name.TextScaled = true
+        name.Font = Enum.Font.SourceSans
+        name.TextStrokeTransparency = 0.5
+        name.Text = player.Name
+        name.TextColor3 = Color3.fromRGB(0, 255, 255)
+        name.Parent = billboard
+    else
+        local label = Instance.new("TextLabel")
+        label.Size = UDim2.new(1, 0, 1, 0)
+        label.BackgroundTransparency = 1
+        label.TextScaled = true
+        label.Font = Enum.Font.SourceSansBold
+        label.TextStrokeTransparency = 0.5
+
+        if role == "Sheriff" then
+            label.Text = "SHERIFF: " .. player.Name
+            label.TextColor3 = Color3.fromRGB(0, 170, 255)
+        elseif role == "Murderer" then
+            label.Text = "MURDERER: " .. player.Name
+            label.TextColor3 = Color3.fromRGB(255, 0, 0)
+        elseif role == "Juggernaut" then
+            label.Text = "JUGGERNAUT: " .. player.Name
+            label.TextColor3 = Color3.fromRGB(255, 165, 0) -- Оранжевый
+        else
+            label.Text = player.Name
+            label.TextColor3 = Color3.fromRGB(0, 255, 0)
+        end
+
+        label.Parent = billboard
+    end
+end
+
+local function handleDeathCleanup(character)
+    local highlight = character:FindFirstChild("RoleHighlight")
+    if highlight then highlight:Destroy() end
+
+    local head = character:FindFirstChild("Head")
+    if head then
+        local gui = head:FindFirstChild("RoleBillboard")
+        if gui then gui:Destroy() end
+    end
+end
+
+local roleStatsFrame = Instance.new("ScreenGui")
+roleStatsFrame.Name = "RoleStatsGui"
+roleStatsFrame.ResetOnSpawn = false
+roleStatsFrame.Parent = game:GetService("Players").LocalPlayer:WaitForChild("PlayerGui")
+
+local statsLabel = Instance.new("TextLabel")
+statsLabel.Size = UDim2.new(0, 220, 0, 100) -- Увеличил высоту из-за новой роли
+statsLabel.Position = UDim2.new(1, -230, 0, 10)
+statsLabel.BackgroundTransparency = 0.3
+statsLabel.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+statsLabel.BorderSizePixel = 0
+statsLabel.TextColor3 = Color3.new(1,1,1)
+statsLabel.TextXAlignment = Enum.TextXAlignment.Left
+statsLabel.Font = Enum.Font.SourceSansBold
+statsLabel.TextScaled = true
+statsLabel.Text = ""
+statsLabel.Parent = roleStatsFrame
+
+local footerLabel = Instance.new("TextLabel")
+footerLabel.Size = UDim2.new(0, 220, 0, 30)
+footerLabel.Position = UDim2.new(1, -230, 0, 110)
+footerLabel.BackgroundTransparency = 1
+footerLabel.TextScaled = true
+footerLabel.Font = Enum.Font.SourceSans
+footerLabel.TextStrokeTransparency = 0.5
+footerLabel.Text = "Made by: Shanewix"
+footerLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+footerLabel.Parent = roleStatsFrame
+
+local TweenService = game:GetService("TweenService")
+local function animateFooterText()
+    while true do
+        local goalColor = Color3.fromHSV(math.random(), 1, 1)
+        local tweenInfo = TweenInfo.new(1, Enum.EasingStyle.Linear, Enum.EasingDirection.InOut, -1, true)
+        local tween = TweenService:Create(footerLabel, tweenInfo, {TextColor3 = goalColor})
+        tween:Play()
+        wait(1)
+    end
+end
+task.spawn(animateFooterText)
+
+local function processCharacter(player)
+    local character = player.Character
+    if not character then return end
+    wait(1)
+
+    local role, weaponName = determineRole(player)
+    highlightPlayer(player, role)
+    setNameOverhead(player, role, weaponName)
+
+    local humanoid = character:FindFirstChildOfClass("Humanoid")
+    if humanoid then
+        humanoid.Died:Connect(function()
+            handleDeathCleanup(character)
+        end)
+    end
+end
+
+local function updateAllPlayers()
+    local counts = {
+        Murderer = 0,
+        Sheriff = 0,
+        Juggernaut = 0,
+        Innocent = 0,
+        InnocentWithWeapon = 0
+    }
+
+    for _, player in pairs(Players:GetPlayers()) do
+        local role, weaponName = determineRole(player)
+        highlightPlayer(player, role)
+        setNameOverhead(player, role, weaponName)
+
+        if counts[role] ~= nil then
+            counts[role] += 1
+        elseif role == "InnocentWithWeapon" then
+            counts["InnocentWithWeapon"] += 1
+        else
+            counts["Innocent"] += 1
+        end
+    end
+
+    statsLabel.Text = string.format(
+        "👤 Roles:\n🔴 Murderers: %d\n🔵 Sheriffs: %d\n🟠 Juggernauts: %d\n🟢 Innocents: %d\n🧪 Innocents w/ Weapon: %d",
+        counts.Murderer, counts.Sheriff, counts.Juggernaut, counts.Innocent, counts.InnocentWithWeapon
+    )
+end
+
+task.spawn(function()
+    while true do
+        updateAllPlayers()
+        wait(2)
+    end
+end)
+
+Players.PlayerAdded:Connect(function(player)
+    player.CharacterAdded:Connect(function()
+        processCharacter(player)
+    end)
+end)
+
+for _, player in pairs(Players:GetPlayers()) do
+    player.CharacterAdded:Connect(function()
+        processCharacter(player)
+    end)
+end
+
+print("[СКРИПТ] Успешно активирован.")
+
+local success, result = pcall(function()
+    StarterGui:SetCore("SendNotification", {
+        Title = "Скрипт активирован",
+        Text = "Роли игроков отслеживаются",
+        Duration = 5
+    })
+end)
+
+if not success then
+    warn("Не удалось отправить уведомление: ", result)
+end

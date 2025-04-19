@@ -1,0 +1,372 @@
+--[[
+  BloodDebt ESP Premium v3.0
+  Features:
+  - Определение ролей каждые 0.5 секунды
+  - UI с кнопкой отключения
+  - Плавные анимации
+  - Оптимизированная производительность
+]]
+
+-- 🔫 Weapon lists
+local murdererWeapons = {
+    ["JS-2 Derringy"] = true, ["JS-22"] = true, ["RR-LCP"] = true,
+    ["Sawn-off"] = true, ["Rosen-Obrez"] = true, ["K1911"] = true,
+    ["SKORPION"] = true, ["ZZ-90"] = true, ["Silver Steel K1911"] = true,
+    ["Clothed Rosen-Obrez"] = true, ["Clothed Sawn-off"] = true,
+    ["Kamatov"] = true, ["GILDED"] = true, ["JS-2 Bonds Derringy"] = true,
+    ["Charcoal Steel JS-22"] = true, ["Pretty Pink RR-LCP"] = true
+}
+
+local sheriffWeapons = {
+    ["RR-Snubby"] = true, ["GG-17"] = true, ["J9-M"] = true,
+    ["I-412"] = true, ["Silver Steel RR-Snubby"] = true
+}
+
+local juggernautWeapons = {
+    ["VK's ANKM"] = true,
+    ["AT's KAR15"] = true,
+    ["RY's GG-17"] = true
+}
+
+local innocentWeapons = {
+    ["Lead Pipe"] = true, ["KitchenKnife"] = true, ["Boxcutters"] = true, ["Pen"] = true
+}
+
+-- 🛠 Сервисы
+local Services = {
+    Players = game:GetService("Players"),
+    StarterGui = game:GetService("StarterGui"),
+    RunService = game:GetService("RunService"),
+    TweenService = game:GetService("TweenService")
+}
+
+-- ⚙️ Настройки
+local Settings = {
+    UpdateInterval = 0.5,    -- Частота обновления ролей
+    FrameRate = 0.1,         -- Частота кадров
+    MaxDistance = 200        -- Дистанция отрисовки
+}
+
+-- 🎨 Цвета
+local Colors = {
+    Murderer = Color3.fromRGB(255, 50, 50),
+    Sheriff = Color3.fromRGB(50, 50, 255),
+    Juggernaut = Color3.fromRGB(180, 0, 0),
+    Innocent = Color3.fromRGB(50, 255, 50),
+    Armed = Color3.fromRGB(175, 255, 255),
+    UI = {
+        Background = Color3.fromRGB(30, 30, 30),
+        Text = Color3.fromRGB(255, 255, 255),
+        Button = Color3.fromRGB(80, 80, 80)
+    }
+}
+
+-- 🔄 Состояние системы
+local State = {
+    Active = true,
+    Cache = {},
+    Objects = {},
+    Connections = {}
+}
+
+-- ♻️ Создание объекта с автоматическим отслеживанием
+local function SafeCreate(className, properties)
+    local obj = Instance.new(className)
+    for prop, val in pairs(properties) do
+        obj[prop] = val
+    end
+    table.insert(State.Objects, obj)
+    return obj
+end
+
+-- 🧹 Полная очистка
+local function Cleanup()
+    -- Удаление объектов
+    for _, obj in ipairs(State.Objects) do
+        pcall(obj.Destroy, obj)
+    end
+    State.Objects = {}
+
+    -- Отключение соединений
+    for _, conn in pairs(State.Connections) do
+        pcall(conn.Disconnect, conn)
+    end
+    State.Connections = {}
+
+    -- Очистка кэша
+    State.Cache = {}
+end
+
+-- 🔍 Определение роли
+local function DetermineRole(player)
+    local items = {}
+    
+    -- Проверка инвентаря
+    local backpack = player:FindFirstChild("Backpack")
+    if backpack then
+        for _, item in ipairs(backpack:GetChildren()) do
+            table.insert(items, item.Name)
+        end
+    end
+
+    -- Проверка оружия в руках
+    local character = player.Character
+    if character then
+        for _, item in ipairs(character:GetChildren()) do
+            if item:IsA("Tool") then
+                table.insert(items, item.Name)
+            end
+        end
+    end
+
+    -- Проверка ролей
+    for _, item in ipairs(items) do
+        if WEAPONS.MURDERER[item] then return "Murderer" end
+        if WEAPONS.SHERIFF[item] then return "Sheriff" end
+        if WEAPONS.JUGGERNAUT[item] then return "Juggernaut" end
+        if WEAPONS.INNOCENT[item] then return "Armed", item end
+    end
+
+    return "Innocent"
+end
+
+-- ✨ Подсветка игрока
+local function HighlightPlayer(player, role)
+    local character = player.Character
+    if not character then return end
+
+    -- Удаление старой подсветки
+    for _, child in ipairs(character:GetDescendants()) do
+        if child.Name == "RoleHighlight" then
+            pcall(child.Destroy, child)
+        end
+    end
+
+    local highlight = SafeCreate("Highlight", {
+        Name = "RoleHighlight",
+        FillTransparency = Settings.Highlight.FillTransparency,
+        OutlineTransparency = Settings.Highlight.OutlineTransparency,
+        FillColor = Colors[role] or Colors.Innocent,
+        OutlineColor = Color3.new(0, 0, 0)
+    })
+
+    -- Плавное появление
+    local tween = Services.TweenService:Create(highlight, TweenInfo.new(0.3), {
+        FillTransparency = Settings.Highlight.FillTransparency
+    })
+    tween:Play()
+
+    highlight.Parent = character
+end
+
+-- 🏷 Создание тега
+local function CreateNameTag(player, role, weapon)
+    local character = player.Character
+    if not character then return end
+
+    local head = character:FindFirstChild("Head")
+    if not head then return end
+
+    -- Удаление старого тега
+    for _, child in ipairs(head:GetDescendants()) do
+        if child.Name == "RoleTag" then
+            pcall(child.Destroy, child)
+        end
+    end
+
+    -- Расчёт расстояния
+    local distance = "??"
+    local localPlayer = Services.Players.LocalPlayer
+    if localPlayer.Character and localPlayer.Character:FindFirstChild("HumanoidRootPart") then
+        distance = math.floor((character.HumanoidRootPart.Position - localPlayer.Character.HumanoidRootPart.Position).Magnitude) .. " studs"
+    end
+
+    -- Создание тега
+    local billboard = SafeCreate("BillboardGui", {
+        Name = "RoleTag",
+        Size = UDim2.new(0, 200, 0, 50),
+        StudsOffset = Vector3.new(0, 3, 0),
+        AlwaysOnTop = true,
+        MaxDistance = Settings.MaxDistance,
+        Active = true,
+        Adornee = head
+    })
+
+    local label = SafeCreate("TextLabel", {
+        Name = "RoleLabel",
+        Size = UDim2.new(1, 0, 1, 0),
+        BackgroundTransparency = 1,
+        Font = Enum.Font.SourceSansBold,
+        TextSize = 18,
+        TextStrokeTransparency = 0.5,
+        TextColor3 = Colors[role] or Colors.Innocent
+    })
+
+    -- Форматирование текста
+    if role == "Armed" then
+        label.Text = string.format("%s\n⚔ %s (%s)", player.Name, weapon, distance)
+    elseif role == "Innocent" then
+        label.Text = string.format("%s (%s)", player.Name, distance)
+    else
+        label.Text = string.format("%s: %s (%s)", role:upper(), player.Name, distance)
+    end
+
+    label.Parent = billboard
+    billboard.Parent = head
+end
+
+-- 📊 Создание интерфейса
+local function CreateUI()
+    local screenGui = SafeCreate("ScreenGui", {
+        Name = "BloodDebtUI",
+        ResetOnSpawn = false,
+        ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    })
+
+    local mainFrame = SafeCreate("Frame", {
+        Size = UDim2.new(0, 250, 0, 200),
+        Position = UDim2.new(1, -260, 0, 10),
+        BackgroundColor3 = Colors.UI.Background,
+        BackgroundTransparency = 0.3,
+        BorderSizePixel = 0
+    })
+
+    local statsLabel = SafeCreate("TextLabel", {
+        Size = UDim2.new(1, -10, 1, -50),
+        Position = UDim2.new(0, 5, 0, 5),
+        BackgroundTransparency = 1,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        TextYAlignment = Enum.TextYAlignment.Top,
+        Font = Enum.Font.SourceSansBold,
+        TextSize = 18,
+        TextColor3 = Colors.UI.Text,
+        Text = "Загрузка данных..."
+    })
+
+    -- Кнопка отключения
+    local toggleButton = SafeCreate("TextButton", {
+        Size = UDim2.new(1, -10, 0, 30),
+        Position = UDim2.new(0, 5, 1, -35),
+        BackgroundColor3 = Colors.UI.Button,
+        BackgroundTransparency = 0.5,
+        TextColor3 = Colors.UI.Text,
+        Font = Enum.Font.SourceSansBold,
+        TextSize = 16,
+        Text = "ОТКЛЮЧИТЬ ESP"
+    })
+
+    -- Обработчик кнопки
+    toggleButton.MouseButton1Click:Connect(function()
+        State.Active = not State.Active
+        toggleButton.Text = State.Active and "ОТКЛЮЧИТЬ ESP" or "ВКЛЮЧИТЬ ESP"
+        
+        if not State.Active then
+            Cleanup()
+        else
+            -- Перезапускаем систему
+            table.clear(State.Cache)
+            InitializePlayers()
+        end
+    end)
+
+    statsLabel.Parent = mainFrame
+    toggleButton.Parent = mainFrame
+    mainFrame.Parent = screenGui
+    screenGui.Parent = Services.Players.LocalPlayer:WaitForChild("PlayerGui")
+
+    return statsLabel
+end
+
+-- 🔄 Обновление статистики
+local function UpdateStats(statsLabel)
+    if not State.Active then return end
+
+    local counts = {
+        Murderer = 0,
+        Sheriff = 0,
+        Juggernaut = 0,
+        Innocent = 0,
+        Armed = 0
+    }
+
+    for _, player in ipairs(Services.Players:GetPlayers()) do
+        local role = DetermineRole(player)
+        counts[role] = counts[role] + 1
+    end
+
+    if statsLabel and statsLabel.Parent then
+        statsLabel.Text = string.format(
+            "🔴 Убийцы: %d\n🔵 Шерифы: %d\n🟤 Джаггернауты: %d\n⚔ Вооруженные: %d\n👤 Всего: %d",
+            counts.Murderer, counts.Sheriff, counts.Juggernaut,
+            counts.Armed,
+            #Services.Players:GetPlayers()
+        )
+    end
+end
+
+-- 👤 Инициализация игрока
+local function InitializePlayer(player)
+    local function SetupCharacter(character)
+        if not character then return end
+
+        -- Обработка смерти
+        local humanoid = character:WaitForChild("Humanoid")
+        State.Connections["death_"..player.UserId] = humanoid.Died:Connect(function()
+            for _, child in ipairs(character:GetDescendants()) do
+                if child.Name == "RoleHighlight" or child.Name == "RoleTag" then
+                    pcall(child.Destroy, child)
+                end
+            end
+        end)
+
+        -- Отложенная инициализация
+        task.delay(1, function()
+            if not State.Active then return end
+            if not character or not character.Parent then return end
+            
+            local role, weapon = DetermineRole(player)
+            HighlightPlayer(player, role)
+            CreateNameTag(player, role, weapon)
+        end)
+    end
+
+    -- Подписка на события
+    State.Connections["char_"..player.UserId] = player.CharacterAdded:Connect(SetupCharacter)
+    if player.Character then
+        task.spawn(SetupCharacter, player.Character)
+    end
+end
+
+-- 🎮 Инициализация всех игроков
+local function InitializePlayers()
+    for _, player in ipairs(Services.Players:GetPlayers()) do
+        InitializePlayer(player)
+    end
+end
+
+-- 🚀 Основной цикл
+local function MainLoop()
+    local statsLabel = CreateUI()
+    InitializePlayers()
+
+    -- Обработка новых игроков
+    State.Connections.playerAdded = Services.Players.PlayerAdded:Connect(InitializePlayer)
+
+    -- Цикл обновления
+    while true do
+        if State.Active then
+            UpdateStats(statsLabel)
+        end
+        task.wait(Settings.UpdateInterval)
+    end
+end
+
+-- ⚡ Запуск системы
+State.Connections.main = Services.RunService.Heartbeat:Connect(MainLoop)
+
+-- Уведомление
+Services.StarterGui:SetCore("SendNotification", {
+    Title = "BloodDebt ESP v3.0",
+    Text = "Система активирована\nИспользуйте кнопку в UI для отключения",
+    Duration = 5
+})

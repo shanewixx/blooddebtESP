@@ -1,10 +1,10 @@
 --[[
-  BloodDebt ESP Pure v3.1
+  BloodDebt ESP Stable v3.2
   Features:
-  - Ультра-быстрое обновление (0.5 сек)
-  - Нет UI элементов управления
-  - Максимальная производительность
-  - Только core-функционал
+  - Обновление ролей каждые 4 секунды
+  - Чистый UI статистики
+  - Дистанция в studs
+  - Оптимизированные проверки
 ]]
 
 -- 🔫 Списки оружия
@@ -35,8 +35,10 @@ local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 
 -- ⚙️ Настройки
-local UPDATE_INTERVAL = 0.5  -- Частота обновления ролей
-local MAX_DISTANCE = 200     -- Дистанция отрисовки (studs)
+local SETTINGS = {
+    UpdateInterval = 4,      -- Частота обновления ролей (4 секунды)
+    MaxDistance = 200        -- Дистанция отрисовки (studs)
+}
 
 -- 🎨 Цвета
 local COLORS = {
@@ -44,13 +46,17 @@ local COLORS = {
     Sheriff = Color3.fromRGB(50, 50, 255),
     Juggernaut = Color3.fromRGB(180, 0, 0),
     Innocent = Color3.fromRGB(50, 255, 50),
-    Armed = Color3.fromRGB(175, 255, 255)
+    Armed = Color3.fromRGB(175, 255, 255),
+    UI = {
+        Background = Color3.fromRGB(30, 30, 30),
+        Text = Color3.fromRGB(255, 255, 255)
+    }
 }
 
--- 🔄 Кэш
+-- 🔄 Кэш игроков
 local PlayerCache = {}
 
--- ♻️ Безопасное создание объекта
+-- ♻️ Создание объекта
 local function SafeCreate(instance, parent, properties)
     local obj = Instance.new(instance)
     for prop, val in pairs(properties) do
@@ -60,7 +66,7 @@ local function SafeCreate(instance, parent, properties)
     return obj
 end
 
--- 🔍 Быстрое определение роли
+-- 🔍 Определение роли
 local function DetermineRole(player)
     local items = {}
     
@@ -93,7 +99,7 @@ local function DetermineRole(player)
     return "Innocent"
 end
 
--- ✨ Плавная подсветка
+-- ✨ Подсветка игрока
 local function HighlightPlayer(player, role)
     local character = player.Character
     if not character then return end
@@ -105,22 +111,16 @@ local function HighlightPlayer(player, role)
         end
     end
 
-    local highlight = SafeCreate("Highlight", character, {
+    SafeCreate("Highlight", character, {
         Name = "RoleHighlight",
-        FillTransparency = 0.8,
-        OutlineTransparency = 0.5,
+        FillTransparency = 0.7,
+        OutlineTransparency = 0.3,
         FillColor = COLORS[role] or COLORS.Innocent,
         OutlineColor = Color3.new(0, 0, 0)
     })
-
-    -- Анимация появления
-    local tween = TweenService:Create(highlight, TweenInfo.new(0.3), {
-        FillTransparency = 0.7
-    })
-    tween:Play()
 end
 
--- 🏷 Создание тега с расстоянием
+-- 🏷 Создание тега
 local function CreateNameTag(player, role, weapon)
     local character = player.Character
     if not character then return end
@@ -148,8 +148,7 @@ local function CreateNameTag(player, role, weapon)
         Size = UDim2.new(0, 200, 0, 50),
         StudsOffset = Vector3.new(0, 3, 0),
         AlwaysOnTop = true,
-        MaxDistance = MAX_DISTANCE,
-        Active = true
+        MaxDistance = SETTINGS.MaxDistance
     })
 
     local label = SafeCreate("TextLabel", billboard, {
@@ -171,7 +170,61 @@ local function CreateNameTag(player, role, weapon)
     end
 end
 
--- 👤 Обработчик игрока
+-- 📊 Создание UI статистики
+local function CreateStatsUI()
+    local screenGui = SafeCreate("ScreenGui", game:GetService("Players").LocalPlayer:WaitForChild("PlayerGui"), {
+        Name = "BloodDebtStats",
+        ResetOnSpawn = false
+    })
+
+    local frame = SafeCreate("Frame", screenGui, {
+        Size = UDim2.new(0, 250, 0, 150),
+        Position = UDim2.new(1, -260, 0, 10),
+        BackgroundColor3 = COLORS.UI.Background,
+        BackgroundTransparency = 0.3
+    })
+
+    local statsLabel = SafeCreate("TextLabel", frame, {
+        Size = UDim2.new(1, -10, 1, -10),
+        Position = UDim2.new(0, 5, 0, 5),
+        BackgroundTransparency = 1,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        TextYAlignment = Enum.TextYAlignment.Top,
+        Font = Enum.Font.SourceSansBold,
+        TextSize = 18,
+        TextColor3 = COLORS.UI.Text,
+        Text = "Загрузка статистики..."
+    })
+
+    return statsLabel
+end
+
+-- 🔄 Обновление статистики
+local function UpdateStats(statsLabel)
+    local counts = {
+        Murderer = 0,
+        Sheriff = 0,
+        Juggernaut = 0,
+        Innocent = 0,
+        Armed = 0
+    }
+
+    for _, player in ipairs(Players:GetPlayers()) do
+        local role = DetermineRole(player)
+        counts[role] = counts[role] + 1
+    end
+
+    if statsLabel and statsLabel.Parent then
+        statsLabel.Text = string.format(
+            "🔴 Убийцы: %d\n🔵 Шерифы: %d\n🟤 Джаггернауты: %d\n⚔ Вооруженные: %d\n👤 Всего: %d",
+            counts.Murderer, counts.Sheriff, counts.Juggernaut,
+            counts.Armed,
+            #Players:GetPlayers()
+        )
+    end
+end
+
+-- 👤 Обработка игрока
 local function ProcessPlayer(player)
     local function SetupCharacter(character)
         if not character then return end
@@ -201,9 +254,11 @@ local function ProcessPlayer(player)
     end
 end
 
--- 🔄 Основной цикл
+-- 🚀 Основной цикл
 local function MainLoop()
-    -- Инициализация всех игроков
+    local statsLabel = CreateStatsUI()
+
+    -- Инициализация игроков
     for _, player in ipairs(Players:GetPlayers()) do
         ProcessPlayer(player)
     end
@@ -211,16 +266,10 @@ local function MainLoop()
     -- Обработка новых игроков
     Players.PlayerAdded:Connect(ProcessPlayer)
 
-    -- Бесконечный цикл обновления
+    -- Цикл обновления
     while true do
-        for _, player in ipairs(Players:GetPlayers()) do
-            if player.Character then
-                local role, weapon = DetermineRole(player)
-                HighlightPlayer(player, role)
-                CreateNameTag(player, role, weapon)
-            end
-        end
-        task.wait(UPDATE_INTERVAL)
+        UpdateStats(statsLabel)
+        task.wait(SETTINGS.UpdateInterval) -- 4 секунды
     end
 end
 
@@ -229,4 +278,4 @@ RunService.Heartbeat:Connect(function()
     pcall(MainLoop)
 end)
 
-print("[BloodDebt ESP] Система активирована с частотой обновления "..UPDATE_INTERVAL.." сек")
+print("[BloodDebt ESP] Система запущена (обновление каждые "..SETTINGS.UpdateInterval.." сек)")

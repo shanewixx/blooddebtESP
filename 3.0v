@@ -1,281 +1,198 @@
---[[
-  BloodDebt ESP Stable v3.2
-  Features:
-  - Обновление ролей каждые 4 секунды
-  - Чистый UI статистики
-  - Дистанция в studs
-  - Оптимизированные проверки
-]]
-
--- 🔫 Списки оружия
-local WEAPONS = {
-    MURDERER = {
-        ["JS-2 DERRINGY"] = true, ["JS-22"] = true, ["RR-LCP"] = true,
-        ["Sawn-Off"] = true, ["Rosen-Obrez"] = true, ["K1911"] = true,
-        ["SKORPION"] = true, ["ZZ-90"] = true, ["SILVER STEEL K1911"] = true,
-        ["Clothed Rosen-Obrez"] = true, ["Clother Sawn-Off"] = true,
-        ["Kamatov"] = true, ["GLIDED"] = true, ["JS-2 BONDS DERRINGY"] = true,
-        ["Charcoal Steel JS-22"] = true, ["Pretty Pink RR-LCP"] = true
-    },
-    SHERIFF = {
-        ["RR-Snubby"] = true, ["GG-17"] = true, ["J9-M"] = true,
-        ["I-412"] = true, ["Silver Steel RR-Snubby"] = true
-    },
-    JUGGERNAUT = {
-        ["ANKM"] = true, ["AT's KAR15"] = true
-    },
-    INNOCENT = {
-        ["Lead Pipe"] = true, ["Kitchen Knife"] = true, ["Boxcutters"] = true
-    }
-}
-
--- 🛠 Сервисы
+-- BloodDebt ESP Ultra-Lite v4.0
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
-local TweenService = game:GetService("TweenService")
+local Heartbeat = RunService.Heartbeat
 
--- ⚙️ Настройки
-local SETTINGS = {
-    UpdateInterval = 4,      -- Частота обновления ролей (4 секунды)
-    MaxDistance = 200        -- Дистанция отрисовки (studs)
-}
+-- Настройки
+local UPDATE_DELAY = 4 -- секунд между полными проверками
+local FAST_UPDATE = 0.5 -- секунд между быстрыми проверками
+local MAX_DISTANCE = 150 -- studs
 
--- 🎨 Цвета
-local COLORS = {
+-- Кэшированные данные
+local LocalPlayer = Players.LocalPlayer
+local PlayerCharacters = {}
+local RoleCache = {}
+local LastFullUpdate = 0
+
+-- Упрощенная система ролей
+local ROLE_COLORS = {
     Murderer = Color3.fromRGB(255, 50, 50),
     Sheriff = Color3.fromRGB(50, 50, 255),
     Juggernaut = Color3.fromRGB(180, 0, 0),
-    Innocent = Color3.fromRGB(50, 255, 50),
     Armed = Color3.fromRGB(175, 255, 255),
-    UI = {
-        Background = Color3.fromRGB(30, 30, 30),
-        Text = Color3.fromRGB(255, 255, 255)
-    }
+    Innocent = Color3.fromRGB(50, 255, 50)
 }
 
--- 🔄 Кэш игроков
-local PlayerCache = {}
+-- Минимальный UI
+local StatsUI = Instance.new("ScreenGui")
+StatsUI.Name = "BD_ESP_Stats"
+StatsUI.ResetOnSpawn = false
 
--- ♻️ Создание объекта
-local function SafeCreate(instance, parent, properties)
-    local obj = Instance.new(instance)
-    for prop, val in pairs(properties) do
-        obj[prop] = val
+local StatsFrame = Instance.new("Frame")
+StatsFrame.Size = UDim2.new(0, 200, 0, 120)
+StatsFrame.Position = UDim2.new(1, -210, 0, 10)
+StatsFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+StatsFrame.BackgroundTransparency = 0.7
+StatsFrame.BorderSizePixel = 0
+
+local StatsLabel = Instance.new("TextLabel")
+StatsLabel.Size = UDim2.new(1, -10, 1, -10)
+StatsLabel.Position = UDim2.new(0, 5, 0, 5)
+StatsLabel.BackgroundTransparency = 1
+StatsLabel.TextColor3 = Color3.new(1, 1, 1)
+StatsLabel.Font = Enum.Font.SourceSansBold
+StatsLabel.TextSize = 16
+StatsLabel.TextXAlignment = Enum.TextXAlignment.Left
+StatsLabel.TextYAlignment = Enum.TextYAlignment.Top
+
+StatsLabel.Parent = StatsFrame
+StatsFrame.Parent = StatsUI
+StatsUI.Parent = LocalPlayer:WaitForChild("PlayerGui")
+
+-- Оптимизированные функции
+local function CheckWeapon(character, weaponLists)
+    for _, tool in ipairs(character:GetChildren()) do
+        if tool:IsA("Tool") and weaponLists[tool.Name] then
+            return true
+        end
     end
-    obj.Parent = parent
-    return obj
+    return false
 end
 
--- 🔍 Определение роли
-local function DetermineRole(player)
-    local items = {}
+local function GetPlayerRole(player)
+    local character = player.Character
+    if not character then return "Innocent" end
     
-    -- Проверка инвентаря
+    -- Быстрая проверка кэша
+    if RoleCache[player] and os.clock() - RoleCache[player].time < UPDATE_DELAY then
+        return RoleCache[player].role, RoleCache[player].weapon
+    end
+
+    -- Полная проверка
+    local role, weapon = "Innocent"
     local backpack = player:FindFirstChild("Backpack")
-    if backpack then
-        for _, item in ipairs(backpack:GetChildren()) do
-            table.insert(items, item.Name)
-        end
+    
+    if CheckWeapon(character, WEAPONS.MURDERER) or (backpack and CheckWeapon(backpack, WEAPONS.MURDERER)) then
+        role = "Murderer"
+    elseif CheckWeapon(character, WEAPONS.SHERIFF) or (backpack and CheckWeapon(backpack, WEAPONS.SHERIFF)) then
+        role = "Sheriff"
+    elseif CheckWeapon(character, WEAPONS.JUGGERNAUT) or (backpack and CheckWeapon(backpack, WEAPONS.JUGGERNAUT)) then
+        role = "Juggernaut"
+    elseif CheckWeapon(character, WEAPONS.INNOCENT) or (backpack and CheckWeapon(backpack, WEAPONS.INNOCENT)) then
+        role = "Armed"
     end
 
-    -- Проверка оружия в руках
-    local character = player.Character
-    if character then
-        for _, item in ipairs(character:GetChildren()) do
-            if item:IsA("Tool") then
-                table.insert(items, item.Name)
-            end
-        end
-    end
-
-    -- Приоритетная проверка ролей
-    for _, item in ipairs(items) do
-        if WEAPONS.MURDERER[item] then return "Murderer" end
-        if WEAPONS.SHERIFF[item] then return "Sheriff" end
-        if WEAPONS.JUGGERNAUT[item] then return "Juggernaut" end
-        if WEAPONS.INNOCENT[item] then return "Armed", item end
-    end
-
-    return "Innocent"
+    RoleCache[player] = {
+        role = role,
+        weapon = weapon,
+        time = os.clock()
+    }
+    
+    return role, weapon
 end
 
--- ✨ Подсветка игрока
-local function HighlightPlayer(player, role)
+local function UpdatePlayerDisplay(player)
     local character = player.Character
     if not character then return end
-
-    -- Удаление старой подсветки
-    for _, child in ipairs(character:GetDescendants()) do
-        if child.Name == "RoleHighlight" then
-            child:Destroy()
-        end
-    end
-
-    SafeCreate("Highlight", character, {
-        Name = "RoleHighlight",
-        FillTransparency = 0.7,
-        OutlineTransparency = 0.3,
-        FillColor = COLORS[role] or COLORS.Innocent,
-        OutlineColor = Color3.new(0, 0, 0)
-    })
-end
-
--- 🏷 Создание тега
-local function CreateNameTag(player, role, weapon)
-    local character = player.Character
-    if not character then return end
-
+    
+    local role = GetPlayerRole(player)
     local head = character:FindFirstChild("Head")
     if not head then return end
 
-    -- Удаление старого тега
-    for _, child in ipairs(head:GetDescendants()) do
-        if child.Name == "RoleTag" then
+    -- Удаляем старые элементы
+    for _, child in ipairs(character:GetDescendants()) do
+        if child.Name == "BD_Highlight" or child.Name == "BD_Tag" then
             child:Destroy()
         end
     end
 
-    -- Расчёт расстояния
+    -- Подсветка
+    local highlight = Instance.new("Highlight")
+    highlight.Name = "BD_Highlight"
+    highlight.FillColor = ROLE_COLORS[role] or ROLE_COLORS.Innocent
+    highlight.FillTransparency = 0.8
+    highlight.OutlineTransparency = 0.5
+    highlight.Parent = character
+
+    -- Тег с расстоянием
     local distance = "??"
-    local localPlayer = Players.LocalPlayer
-    if localPlayer.Character and localPlayer.Character:FindFirstChild("HumanoidRootPart") then
-        distance = math.floor((character.HumanoidRootPart.Position - localPlayer.Character.HumanoidRootPart.Position).Magnitude) .. " studs"
+    if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+        distance = math.floor((character.HumanoidRootPart.Position - LocalPlayer.Character.HumanoidRootPart.Position).Magnitude).."m"
     end
 
-    -- Создание тега
-    local billboard = SafeCreate("BillboardGui", head, {
-        Name = "RoleTag",
-        Size = UDim2.new(0, 200, 0, 50),
-        StudsOffset = Vector3.new(0, 3, 0),
-        AlwaysOnTop = true,
-        MaxDistance = SETTINGS.MaxDistance
-    })
+    local tag = Instance.new("BillboardGui")
+    tag.Name = "BD_Tag"
+    tag.Size = UDim2.new(0, 200, 0, 40)
+    tag.StudsOffset = Vector3.new(0, 2.5, 0)
+    tag.AlwaysOnTop = true
+    tag.MaxDistance = MAX_DISTANCE
+    tag.Adornee = head
 
-    local label = SafeCreate("TextLabel", billboard, {
-        Size = UDim2.new(1, 0, 1, 0),
-        BackgroundTransparency = 1,
-        Font = Enum.Font.SourceSansBold,
-        TextSize = 18,
-        TextStrokeTransparency = 0.5,
-        TextColor3 = COLORS[role] or COLORS.Innocent
-    })
-
-    -- Форматирование текста
-    if role == "Armed" then
-        label.Text = string.format("%s\n⚔ %s (%s)", player.Name, weapon, distance)
-    elseif role == "Innocent" then
-        label.Text = string.format("%s (%s)", player.Name, distance)
-    else
-        label.Text = string.format("%s: %s (%s)", role:upper(), player.Name, distance)
-    end
+    local label = Instance.new("TextLabel")
+    label.Size = UDim2.new(1, 0, 1, 0)
+    label.BackgroundTransparency = 1
+    label.TextColor3 = ROLE_COLORS[role] or ROLE_COLORS.Innocent
+    label.Font = Enum.Font.SourceSansBold
+    label.TextSize = 14
+    label.Text = role == "Innocent" and player.Name or ("["..role.."] "..player.Name.." ("..distance..")")
+    
+    label.Parent = tag
+    tag.Parent = head
 end
 
--- 📊 Создание UI статистики
-local function CreateStatsUI()
-    local screenGui = SafeCreate("ScreenGui", game:GetService("Players").LocalPlayer:WaitForChild("PlayerGui"), {
-        Name = "BloodDebtStats",
-        ResetOnSpawn = false
-    })
-
-    local frame = SafeCreate("Frame", screenGui, {
-        Size = UDim2.new(0, 250, 0, 150),
-        Position = UDim2.new(1, -260, 0, 10),
-        BackgroundColor3 = COLORS.UI.Background,
-        BackgroundTransparency = 0.3
-    })
-
-    local statsLabel = SafeCreate("TextLabel", frame, {
-        Size = UDim2.new(1, -10, 1, -10),
-        Position = UDim2.new(0, 5, 0, 5),
-        BackgroundTransparency = 1,
-        TextXAlignment = Enum.TextXAlignment.Left,
-        TextYAlignment = Enum.TextYAlignment.Top,
-        Font = Enum.Font.SourceSansBold,
-        TextSize = 18,
-        TextColor3 = COLORS.UI.Text,
-        Text = "Загрузка статистики..."
-    })
-
-    return statsLabel
-end
-
--- 🔄 Обновление статистики
-local function UpdateStats(statsLabel)
-    local counts = {
-        Murderer = 0,
-        Sheriff = 0,
-        Juggernaut = 0,
-        Innocent = 0,
-        Armed = 0
-    }
-
+local function UpdateAllPlayers()
+    local counts = {Murderer = 0, Sheriff = 0, Juggernaut = 0, Armed = 0, Innocent = 0}
+    
     for _, player in ipairs(Players:GetPlayers()) do
-        local role = DetermineRole(player)
+        local role = GetPlayerRole(player)
         counts[role] = counts[role] + 1
+        
+        if player.Character then
+            UpdatePlayerDisplay(player)
+        end
     end
-
-    if statsLabel and statsLabel.Parent then
-        statsLabel.Text = string.format(
-            "🔴 Убийцы: %d\n🔵 Шерифы: %d\n🟤 Джаггернауты: %d\n⚔ Вооруженные: %d\n👤 Всего: %d",
-            counts.Murderer, counts.Sheriff, counts.Juggernaut,
-            counts.Armed,
-            #Players:GetPlayers()
-        )
-    end
+    
+    StatsLabel.Text = string.format(
+        "🔴 Murderers: %d\n🔵 Sheriffs: %d\n🟤 Juggernauts: %d\n⚔ Armed: %d\n👤 Total: %d",
+        counts.Murderer, counts.Sheriff, counts.Juggernaut, counts.Armed, #Players:GetPlayers()
+    )
 end
 
--- 👤 Обработка игрока
-local function ProcessPlayer(player)
-    local function SetupCharacter(character)
-        if not character then return end
+-- Основной цикл
+local lastUpdate = 0
+Heartbeat:Connect(function()
+    local now = os.clock()
+    
+    -- Полное обновление каждые UPDATE_DELAY секунд
+    if now - lastUpdate >= UPDATE_DELAY then
+        UpdateAllPlayers()
+        lastUpdate = now
+    end
+    
+    -- Быстрые проверки новых игроков
+    task.wait(FAST_UPDATE)
+end)
 
-        -- Обработка смерти
+-- Обработка игроков
+Players.PlayerAdded:Connect(function(player)
+    player.CharacterAdded:Connect(function(character)
         character:WaitForChild("Humanoid").Died:Connect(function()
             for _, child in ipairs(character:GetDescendants()) do
-                if child.Name == "RoleHighlight" or child.Name == "RoleTag" then
-                    pcall(child.Destroy, child)
+                if child.Name == "BD_Highlight" or child.Name == "BD_Tag" then
+                    child:Destroy()
                 end
             end
         end)
-
-        -- Отложенная инициализация
-        task.delay(1, function()
-            if not character or not character.Parent then return end
-            local role, weapon = DetermineRole(player)
-            HighlightPlayer(player, role)
-            CreateNameTag(player, role, weapon)
-        end)
-    end
-
-    -- Подписка на события
-    player.CharacterAdded:Connect(SetupCharacter)
-    if player.Character then
-        task.spawn(SetupCharacter, player.Character)
-    end
-end
-
--- 🚀 Основной цикл
-local function MainLoop()
-    local statsLabel = CreateStatsUI()
-
-    -- Инициализация игроков
-    for _, player in ipairs(Players:GetPlayers()) do
-        ProcessPlayer(player)
-    end
-
-    -- Обработка новых игроков
-    Players.PlayerAdded:Connect(ProcessPlayer)
-
-    -- Цикл обновления
-    while true do
-        UpdateStats(statsLabel)
-        task.wait(SETTINGS.UpdateInterval) -- 4 секунды
-    end
-end
-
--- ⚡ Запуск системы
-RunService.Heartbeat:Connect(function()
-    pcall(MainLoop)
+        task.wait(1)
+        UpdatePlayerDisplay(player)
+    end)
 end)
 
-print("[BloodDebt ESP] Система запущена (обновление каждые "..SETTINGS.UpdateInterval.." сек)")
+-- Инициализация
+for _, player in ipairs(Players:GetPlayers()) do
+    if player.Character then
+        task.spawn(UpdatePlayerDisplay, player)
+    end
+end
+
+print("[BD ESP] Запущен с интервалом обновления "..UPDATE_DELAY.." сек")

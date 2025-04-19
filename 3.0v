@@ -7,29 +7,26 @@
   - Оптимизированная производительность
 ]]
 
--- 🔫 Weapon lists
-local murdererWeapons = {
-    ["JS-2 Derringy"] = true, ["JS-22"] = true, ["RR-LCP"] = true,
-    ["Sawn-off"] = true, ["Rosen-Obrez"] = true, ["K1911"] = true,
-    ["SKORPION"] = true, ["ZZ-90"] = true, ["Silver Steel K1911"] = true,
-    ["Clothed Rosen-Obrez"] = true, ["Clothed Sawn-off"] = true,
-    ["Kamatov"] = true, ["GILDED"] = true, ["JS-2 Bonds Derringy"] = true,
-    ["Charcoal Steel JS-22"] = true, ["Pretty Pink RR-LCP"] = true
-}
-
-local sheriffWeapons = {
-    ["RR-Snubby"] = true, ["GG-17"] = true, ["J9-M"] = true,
-    ["I-412"] = true, ["Silver Steel RR-Snubby"] = true
-}
-
-local juggernautWeapons = {
-    ["VK's ANKM"] = true,
-    ["AT's KAR15"] = true,
-    ["RY's GG-17"] = true
-}
-
-local innocentWeapons = {
-    ["Lead Pipe"] = true, ["KitchenKnife"] = true, ["Boxcutters"] = true, ["Pen"] = true
+-- 🔫 Списки оружия
+local WEAPONS = {
+    MURDERER = {
+        ["JS-2 DERRINGY"] = true, ["JS-22"] = true, ["RR-LCP"] = true,
+        ["Sawn-Off"] = true, ["Rosen-Obrez"] = true, ["K1911"] = true,
+        ["SKORPION"] = true, ["ZZ-90"] = true, ["SILVER STEEL K1911"] = true,
+        ["Clothed Rosen-Obrez"] = true, ["Clother Sawn-Off"] = true,
+        ["Kamatov"] = true, ["GLIDED"] = true, ["JS-2 BONDS DERRINGY"] = true,
+        ["Charcoal Steel JS-22"] = true, ["Pretty Pink RR-LCP"] = true
+    },
+    SHERIFF = {
+        ["RR-Snubby"] = true, ["GG-17"] = true, ["J9-M"] = true,
+        ["I-412"] = true, ["Silver Steel RR-Snubby"] = true
+    },
+    JUGGERNAUT = {
+        ["ANKM"] = true, ["AT's KAR15"] = true
+    },
+    INNOCENT = {
+        ["Lead Pipe"] = true, ["Kitchen Knife"] = true, ["Boxcutters"] = true
+    }
 }
 
 -- 🛠 Сервисы
